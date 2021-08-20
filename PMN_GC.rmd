@@ -1,0 +1,705 @@
+#PMN_GC
+---
+#title: "Untitled"
+#author: "Adonis D'Mello"
+#output: PDFs/Txt files
+---
+
+#Packages
+
+```{r}
+require(cowplot)
+require(dendextend)
+require(edgeR)
+require(FactoMineR)
+require(ggdendro)
+require(ggplot2)
+require(gplots)
+require(gridExtra)
+require(gtools)
+require(pvclust)
+require(reshape)
+require(vegan)
+require(WGCNA)
+require(ggfortify)
+require(ggrepel)
+require(GGally)
+require(DESeq2)
+require(pathview)
+require(reshape2)
+require(KEGGprofile)
+require(UpSetR)
+require(biomaRt)
+require(tidyr)
+require(factoextra)
+library(png)
+library(grid)
+library(gridExtra)
+library(ggpubr)
+require(stringr)
+```
+
+#Functions
+```{r}
+get_heatmap_separators <- function(vector){
+  sep <- c()
+  for(i in 2:length(unique(vector))){
+    sep[length(sep) + 1] <- min(which(vector == unique(vector)[i])) - 1
+  }
+  return(sep)
+}
+
+merge.all <- function(x, ..., by = "row.names") {
+  L <- list(...)
+  for (i in seq_along(L)) {
+    x <- merge(x, L[[i]], by = by, all=TRUE)
+    rownames(x) <- x$Row.names
+    x$Row.names <- NULL
+  }
+  return(x)
+}
+
+get_dendro_structure <- function(result){
+  structure <- hang.dendrogram(as.dendrogram(result$hclust))
+  structure <- capture.output(str(structure))
+  structure <- structure[grepl("leaf", structure)]
+  structure <- as.numeric(as.character(substr(structure, regexpr("h=", structure ) + 3, regexpr("  )", structure))))
+  return(structure)
+}
+
+get_dendro_data <- function(result){
+  dendro.data <- dendro_data(result$hclust)
+  dendro.data <- dendro.data$segments[which(dendro.data$segments$y == dendro.data$segments$yend),]
+  for(i in 1:nrow(dendro.data)){
+    dendro.data$minx[i] <- min(c(dendro.data$x[i], dendro.data$xend[i]))
+  }
+  dendro.data <- dendro.data[order(as.numeric(as.character(dendro.data$y)), as.numeric(as.character(dendro.data$minx))),]
+  return(dendro.data)
+}
+
+get_dendro_bootstraps <- function(dendro_data){
+  bootstrap.positions <- as.data.frame(matrix(nrow = length(dendro_data$y[duplicated(dendro_data$y)]),
+                                              ncol = 2))
+  for(i in 1:length(dendro_data$y[duplicated(dendro_data$y)])){
+    dendro_data.subset <- dendro_data[which(dendro_data$y == dendro_data$y[duplicated(dendro_data$y)][i]),]
+    bootstrap.positions[i,1] <- unique(dendro_data.subset$x)
+    bootstrap.positions[i,2] <- unique(dendro_data.subset$y)
+  }
+  return(bootstrap.positions)
+}
+
+query_upset <- function(set, queries) {
+  if (length(queries) ==1) {
+    intersect <- set[,queries,drop = F]
+    intersect$tmp = 0
+    intersect <- intersect[rowSums(intersect)==1,]
+  } else {
+    intersect <- set[,queries]
+    intersect <- intersect[rowSums(intersect) == length(queries),]
+  }
+  tmp <- set[rownames(intersect),]
+  tmp <- tmp[rowSums(tmp) == length(queries),]
+  return(tmp)
+}
+
+library(extrafont)
+loadfonts(device = "win")
+windowsFonts(Times=windowsFont("Arial"))
+windowsFonts(Times=windowsFont("Times New Roman"))
+
+```
+
+
+#Directories (Change as needed)
+```{r}
+input_directory <- "/Users/admello/OneDrive - University of Maryland School of Medicine/Desktop/PGAMR_Final/codetest/input"
+output_directory <- "/Users/admello/OneDrive - University of Maryland School of Medicine/Desktop/PGAMR_Final/codetest/output"
+```
+
+#Inputs (use only 1 Block at a time per run)
+
+```{r}
+
+#Input Block 1
+#counts.path <- paste0(input_directory,"/130s_counts.txt") 
+#groups.path <- paste0(input_directory,"/130s_groups.txt")
+#dir.create(file.path(output_directory, "130s"))
+#output_dir <- paste0(output_directory,"/130s")
+#comparisons <- c("130+PMN_1h_vs_130_1h","130+PMN_1h_vs_130+PMN_0h","3X130+PMN_1h_vs_3X130_1h","3X130+PMN_1h_vs_3X130+PMN_0h")
+
+#Input Block 2
+#counts.path <- paste0(input_directory,"/H041_counts.txt") 
+#groups.path <- paste0(input_directory,"/H041_groups.txt")
+#dir.create(file.path(output_directory, "H041"))
+#output_dir <- paste0(output_directory,"/H041")
+#comparisons <- c("H041+PMN_1h_vs_H041_1h","H041+PMN_1h_vs_H041+PMN_0h")
+
+#Input Block 3
+#counts.path <- paste0(input_directory,"/Host_counts.txt") 
+#groups.path <- paste0(input_directory,"/Host_groups.txt")
+#dir.create(file.path(output_directory, "Host"))
+#output_dir <- paste0(output_directory,"/Host")
+#comparisons <- c("PMN_1h_vs_PMN_0h","130+PMN_1h_vs_130+PMN_0h","3X130+PMN_1h_vs_3X130+PMN_0h","H041+PMN_1h_vs_H041+PMN_0h")
+
+#Input Block 4
+counts.path <- paste0(input_directory,"/coreNGOho41Opa_counts.txt") 
+groups.path <- paste0(input_directory,"/coreNGOho41Opa_groups.txt")
+dir.create(file.path(output_directory, "GCcore"))
+output_dir <- paste0(output_directory,"/GCcore")
+comparisons <-c("H041.PMN_1h_vs_H041_1h","H041.PMN_1h_vs_H041.PMN_0h","130.PMN_1h_vs_130_1h","130.PMN_1h_vs_130.PMN_0h","3X130.PMN_1h_vs_3X130_1h","3X130.PMN_1h_vs_3X130.PMN_0h")
+kegg.species <- "ngo"
+
+```
+
+#Read inputs
+
+```{r}
+counts <- read.delim(counts.path, header = T, row.names = 1)
+design <- read.delim(groups.path, header = T)
+#Aquiring colors 
+grp.col <- design[,ncol(design)-1]
+grp.pch <- design[,ncol(design)]
+colSums(counts)
+sort(colSums(counts))
+colnames(counts)
+
+```
+
+#Deseq2 normalization
+
+```{r}
+
+#Normalization
+if (length(colnames(design)) > 4) {
+  dds <- DESeqDataSetFromMatrix(countData = floor(counts), colData = design, design = ~ donor + condition )
+} else {
+  dds <- DESeqDataSetFromMatrix(countData = counts, colData = design, design = ~ condition )
+}
+dds <- estimateSizeFactors(dds)
+dds <- estimateDispersions(dds)
+counts.vsd <- as.data.frame(getVarianceStabilizedData(dds))
+
+write.table(counts.vsd, file = paste0(output_dir,"/Vst_counts.txt"), append = F, row.names = T,sep = "\t")
+```
+
+#PCA 
+
+```{r}
+
+pca <- prcomp(t(counts.vsd))
+df_out <- as.data.frame(pca$x)
+percentage <- round(pca$sdev^2 / sum(pca$sde^2) * 100, 2)
+percentage <- paste( colnames(df_out), "(", paste(as.character(percentage), "% )", sep="") )
+
+fviz_eig(pca)
+
+  pca.col <- unique(cbind(as.data.frame(design$condition),grp.col))[,2]
+  pca.col <- factor(grp.col , levels = as.vector(pca.col))
+  pca.groups <- factor(paste0(design$strain,design$condition), levels = unique(as.vector(paste0(design$strain,design$condition))))
+  pca.shape <- design$donor
+  pca.pch <- unique(cbind(as.data.frame(design$donor),grp.pch))
+  rownames(pca.pch) = pca.pch$`design$donor`
+  pca.pch <- pca.pch[levels(pca.shape),]$grp.pch
+  shp.text <- "Donor"
+
+pca.plot <- ggplot(df_out, aes(x = PC1, y = PC2)) + geom_point(aes(fill = pca.groups, 
+            shape=pca.shape),size = 5,show.legend = TRUE) + labs(title = "", fill = "Samples", shape=shp.text , x=percentage[1] , y=percentage[2])	+ 
+              guides(fill=guide_legend(override.aes=list(shape=21))) + 
+            scale_shape_manual(values = pca.pch) + scale_fill_manual(values = levels(pca.col)) + theme_bw() + theme(text=element_text(size=12,family = "Arial")) 
+
+print(pca.plot)
+
+
+evs <- pca$sdev^2
+per <- sum(evs)
+
+pdf(paste0(output_dir,"/pca_plot.pdf"),
+    height=8,
+    width=8)
+print(pca.plot)
+dev.off()
+
+pdf(paste0(output_dir,"/pca_scree.pdf"),
+    height=5,
+    width=8)
+plot(evs/per, main="PCA Scree Plot", ylab="Variation Ratio", xlab="PC")
+dev.off()
+
+```
+
+
+#Dendogram 
+
+```{r}
+colnames(counts.vsd)
+dendrogram <- as.data.frame(counts.vsd)
+result <- pvclust(dendrogram, method.dist="cor", method.hclust="average", nboot=10)
+
+structure <- get_dendro_structure(result)
+dendro.data <- get_dendro_data(result)
+bootstrap.positions <- get_dendro_bootstraps(dendro.data)
+
+points.df <- as.data.frame(cbind(seq(1,length(structure),1),
+                                 structure))
+
+dendrogroups <- factor(pca.groups[result$hclust$order], levels = unique(pca.groups[result$hclust$order]))
+dendroshape <- design$donor[result$hclust$order]
+dendrocol <- factor(design$color[result$hclust$order], levels = unique(design$color[result$hclust$order]))
+dendrosize <- colSums(counts)[result$hclust$order]
+dendropch <- grp.pch[result$hclust$order]
+
+  dendropch <- unique(cbind(as.data.frame(dendroshape),dendropch))
+  rownames(dendropch) = dendropch$dendroshape
+  dendropch <- dendropch[levels(dendroshape),]$dendropch
+
+
+dendrogram.plot <- ggdendrogram(hang.dendrogram(as.dendrogram(result$hclust)), theme_dendro = T)+
+  geom_point(aes(x=seq(1,length(structure)), y = structure, fill = dendrogroups, shape = dendroshape), size=5)+
+  labs(title = "", x = "", y = "", fill = "Samples", shape = shp.text)+scale_shape_manual(values = dendropch)+scale_fill_manual(values =levels(dendrocol))+
+  guides(fill=guide_legend(override.aes=list(shape=21)))+
+  theme_minimal()+
+  theme(text=element_text(size=12,family = "Arial"),axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1, size = 7),
+        axis.text.y = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+for(i in 1:length(result$edges$bp)){
+  text <- round(result$edges$bp[i] * 100,0)
+  dendrogram.plot <- dendrogram.plot + annotate("text", label = text, x=bootstrap.positions[i,1] + 0.6, y=bootstrap.positions[i,2] + 0.002, size = 2)
+}
+
+print(dendrogram.plot)
+
+pdf(paste0(output_dir,"/dendrogram_plot.pdf"),
+ height=5,
+    width=8)
+print(dendrogram.plot)
+dev.off()
+
+```
+
+#Deseq Independant Filtered Rarefy
+
+```{r}
+
+dds <- DESeq(dds, betaPrior = F)
+contrast.list <- data.frame(Contrast=comparisons)
+torarefy <- c()
+
+for (i in contrast.list$Contrast) {
+  if (grepl("Host",output_dir)) { j <- i } else { j <- gsub("[+]",".",i) }
+  #if (grepl("GCcore",output_dir)) { j <- i } else { j <- gsub("[+]",".",i) }
+  pair <- as.data.frame(strsplit(as.character(j),'_vs_'))
+	DE.genes <- as.data.frame(results(dds, contrast=c("condition",as.character(pair[1,]),as.character(pair[2,])), independentFiltering = TRUE, alpha=0.05))
+	DE.genes <- na.omit(DE.genes)
+	rareall <- as.data.frame(c(rep_len(1,length.out = length(row.names(DE.genes)))),row.names = rownames(DE.genes) )
+	torarefy <- merge.all(torarefy,rareall)
+}
+
+rarefy.counts <- round(counts[rownames(torarefy),],0)
+
+raremax <- round(min(rowSums(t(rarefy.counts))),0)
+srare <- rarefy(t(rarefy.counts),raremax)
+
+rarefy.raw.df <- rarecurve(t(rarefy.counts), step = round(raremax/1000,0), sample = raremax)
+
+rarefy.df <- as.data.frame(matrix(nrow = 0,
+                                  ncol = 5))
+rarefy.points.df <- rarefy.df
+for(i in 1:length(rarefy.raw.df)){
+  steps <- as.numeric(gsub("N","",names(rarefy.raw.df[[i]])))
+  detected_genes <- as.numeric(rarefy.raw.df[[i]])
+  rarefy.df <- as.data.frame(rbind(rarefy.df,
+                                   cbind(as.numeric(steps),as.numeric(detected_genes),as.character(design[i,1]),as.character(design[i,3]),design[i,4])))
+  rarefy.points.df <- as.data.frame(rbind(rarefy.points.df,
+                                          cbind(as.numeric(max(steps)),as.numeric(max(detected_genes)),as.character(design[i,1]),as.character(design[i,3],design[i,4]))))
+  
+}
+rarefy.plot <- ggplot()+
+  geom_line(mapping=aes(x=as.numeric(as.character(rarefy.df[,1])), y=as.numeric(as.character(rarefy.df[,2])),group=rarefy.df[,3],color=rarefy.df[,4]))+
+  geom_point(mapping=aes(x=as.numeric(as.character(rarefy.points.df[,1])), y=as.numeric(as.character(rarefy.points.df[,2])),group=rarefy.points.df[,3],color=rarefy.points.df[,4]),size = 3)+
+  #guides(color = F,shape = F)+
+  scale_color_manual(values = levels(grp.col) )+
+  labs(x="Reads mapping to protein-coding genes", y="Genes detected", color = "Sample") + xlim(0,10000000)+
+  theme_bw() + theme(text=element_text(size=12,family = "Arial"))
+
+pdf(paste0(output_dir,"/rarefication_plot.pdf"),
+    height=5,
+    width=8)
+grid.arrange(rarefy.plot)
+dev.off()
+
+
+```
+
+#Host DE - time + mean hm (only for Input Block 3)
+```{r}
+dds <- DESeq(dds, betaPrior = F)
+
+comparisons <- c("PMN_1h_vs_PMN_0h","130+PMN_1h_vs_130+PMN_0h","3X130+PMN_1h_vs_3X130+PMN_0h","H041+PMN_1h_vs_H041+PMN_0h")
+contrast.list <- data.frame(Contrast=comparisons)
+
+upset <- c()
+upset1 <- c()
+upset2 <- c()
+
+for (i in contrast.list$Contrast) {
+	pair <- as.data.frame(strsplit(as.character(i),'_vs_'))
+	DE.genes <- as.data.frame(results(dds, contrast=c("condition",as.character(pair[1,]),as.character(pair[2,])), independentFiltering = TRUE, alpha=0.05))
+	DE.genes <- na.omit(DE.genes)
+	rareall <- as.data.frame(c(rep_len(1,length.out = length(row.names(DE.genes)))),row.names = rownames(DE.genes) )
+	torarefy <- merge.all(torarefy,rareall)
+  heading<- paste(as.character(pair[1,])," vs ",as.character(pair[2,])," (Abs(LFC) > 1"," and FDR < 0.05",")", sep="")
+	DE.genes$Significant = as.factor(DE.genes$padj <= 0.05 & abs(DE.genes$log2FoldChange) >= 1)
+
+	DE.genes <- DE.genes[DE.genes$padj <= 0.05,]
+  DE.genes <- DE.genes[abs(DE.genes$log2FoldChange) >=1,]
+
+	write.table(DE.genes, file = paste0(output_dir,"/",i,"_FDRLFC_degenes.txt"), append = F, row.names = T,sep = "\t")
+	
+	genes1 <- as.data.frame(c(rep_len(1,length.out = length(row.names(DE.genes[DE.genes$log2FoldChange>=1,])))),row.names = rownames(DE.genes[DE.genes$log2FoldChange>=1,]) )
+	upset1 <- merge.all(upset1,genes1)
+	genes2 <- as.data.frame(c(rep_len(1,length.out = length(row.names(DE.genes[DE.genes$log2FoldChange<=-1,])))),row.names = rownames(DE.genes[DE.genes$log2FoldChange<=-1,]) )
+	upset2 <- merge.all(upset2,genes2)
+	
+	genes <- as.data.frame(c(rep_len(1,length.out = length(row.names(DE.genes)))),row.names = rownames(DE.genes) )
+	upset <- merge.all(upset,genes)
+}
+
+colnames(torarefy) <- as.vector(contrast.list$Contrast)
+torarefy[is.na(torarefy)]<-0
+
+colnames(upset) <- as.vector(contrast.list$Contrast)
+upset[is.na(upset)]<-0
+
+colnames(upset1) <- as.vector(contrast.list$Contrast)
+upset1[is.na(upset1)]<-0
+colnames(upset2) <- as.vector(contrast.list$Contrast)
+upset2[is.na(upset2)]<-0
+
+write.table(upset, file = paste0(output_dir,"/","Upset_FDR_GeneMatrixLFC.txt"), append = F, row.names = T,sep = "\t")
+write.table(upset1, file = paste0(output_dir,"/","Upset1_FDR_GeneMatrixLFC.txt"), append = F, row.names = T,sep = "\t")
+write.table(upset2, file = paste0(output_dir,"/","Upset2_FDR_GeneMatrixLFC.txt"), append = F, row.names = T,sep = "\t")
+
+upset.plot <- upset(upset, sets = colnames(upset), sets.bar.color = "orange", point.size = 1.5,text.scale = 1,
+                     queries = list(list(query = intersects, params = comparisons, color = "red", active = T),list(query = intersects, params = c("130+PMN_1h_vs_130+PMN_0h","3X130+PMN_1h_vs_3X130+PMN_0h","H041+PMN_1h_vs_H041+PMN_0h"), color = "green", active = T)),
+              order.by = "freq", nintersects = 60)
+
+upset.plot1 <- upset(upset1, sets = colnames(upset1), sets.bar.color = "red", point.size = 1.5,text.scale = 1,
+              order.by = "freq", nintersects = 60)
+
+upset.plot2 <- upset(upset2, sets = colnames(upset2), sets.bar.color = "blue", point.size = 1.5,text.scale = 1,
+              order.by = "freq", nintersects = 60)
+
+upset3 <- as.data.frame(rep_len(1,length.out = length(c(rownames(query_upset(set = upset, queries = comparisons))))),row.name=rownames(query_upset(set = upset, queries = comparisons)))
+
+newcts <- counts[rownames(upset3),]
+dds2 <- DESeqDataSetFromMatrix(countData = floor(newcts), colData = design, design = ~ donor + condition )
+dds2 <- DESeq(dds2, betaPrior = F)
+
+c2 <- c("130+PMN_1h_vs_PMN_1h","3X130+PMN_1h_vs_PMN_1h","H041+PMN_1h_vs_PMN_1h")
+contrast.list <- data.frame(Contrast=c2)
+for (i in contrast.list$Contrast) {
+	pair <- as.data.frame(strsplit(as.character(i),'_vs_'))
+	DE.genes <- as.data.frame(results(dds2, contrast=c("condition",as.character(pair[1,]),as.character(pair[2,])), independentFiltering = TRUE, alpha=0.05))
+	DE.genes <- na.omit(DE.genes)
+	rareall <- as.data.frame(c(rep_len(1,length.out = length(row.names(DE.genes)))),row.names = rownames(DE.genes) )
+	torarefy <- merge.all(torarefy,rareall)
+  heading<- paste(as.character(pair[1,])," vs ",as.character(pair[2,])," (Abs(LFC) > 1"," and FDR < 0.05",")", sep="")
+	DE.genes$Significant = as.factor(DE.genes$padj <= 0.05 & abs(DE.genes$log2FoldChange) >= 1)
+
+	DE.genes <- DE.genes[DE.genes$padj <= 0.05,]
+
+	write.table(DE.genes, file = paste0(output_dir,"/",i,"_FDRLFC_degenes.txt"), append = F, row.names = T,sep = "\t")
+	
+	genes <- as.data.frame(c(rep_len(1,length.out = length(row.names(DE.genes)))),row.names = rownames(DE.genes) )
+	upset3 <- merge.all(upset3,genes)
+}
+
+colnames(upset3) <- c("Time",as.vector(contrast.list$Contrast))
+upset3[is.na(upset3)]<-0
+write.table(upset3, file = paste0(output_dir,"/","Upset3_FDR_GeneMatrixLFC.txt"), append = F, row.names = T,sep = "\t")
+
+upset.plot3 <- upset(upset3, sets = colnames(upset3), sets.bar.color = c("red",rep("orange",3)), point.size = 1.5,text.scale = 1,
+                     queries = list(list(query = intersects, params = colnames(upset3), color = "green", active = T)),
+              order.by = "freq", nintersects = 60)
+
+pdf(paste0(output_dir,"/Upset_degenes_plot_LFC.pdf"),family = "Arial",
+    height=5,
+    width=8)
+print(upset.plot)
+dev.off()
+
+pdf(paste0(output_dir,"/Upset_degenes_plot1_LFC.pdf"),family = "Arial",
+    height=5,
+    width=8)
+print(upset.plot1)
+dev.off()
+
+pdf(paste0(output_dir,"/Upset_degenes_plot2_LFC.pdf"),family = "Arial",
+    height=5,
+    width=8)
+print(upset.plot2)
+dev.off()
+
+pdf(paste0(output_dir,"/Upset_degenes_plot3_LFC.pdf"),family = "Arial",
+    height=5,
+    width=8)
+print(upset.plot3)
+dev.off()
+
+hmgenes <- rownames(query_upset(set = upset, queries = comparisons[2:4]))
+hmgenes <- c(hmgenes,rownames(query_upset(set = upset3, queries = colnames(upset3))))
+
+hm <- counts.vsd[hmgenes,]
+
+hm$PMN_0h <- rowMeans(hm[,c(1:5)])
+hm$PMN_130_0h <- rowMeans(hm[,c(6:11)])
+hm$PMN_3X130_0h <- rowMeans(hm[,c(12:16)])
+hm$PMN_H041_0h <- rowMeans(hm[,c(17:22)])
+hm$PMN_1h <- rowMeans(hm[,c(23:27)])
+hm$PMN_130_1h <- rowMeans(hm[,c(28:33)])
+hm$PMN_3X130_1h <- rowMeans(hm[,c(34:38)])
+hm$PMN_H041_1h <- rowMeans(hm[,c(39:44)])
+
+hm <- hm[,c("PMN_0h","PMN_130_0h","PMN_3X130_0h","PMN_H041_0h","PMN_1h","PMN_130_1h","PMN_3X130_1h","PMN_H041_1h")]
+
+bhm <- t(scale(t(hm)))
+
+bhm <- as.matrix(bhm)
+bhm <- bhm[rowSums(bhm)!=0,]
+ord <- hclust(d = dist(bhm))$order
+ord2 <- hclust(d = dist(t(bhm)))$order
+bhm <- bhm[rev(ord),]#ord2]
+bhm <- melt(bhm)
+colnames(bhm) = c("y","x","z")
+
+hmcol <- colorRampPalette(c("navyblue","white","firebrick3"))(75)
+pdf(paste0(output_dir,"/tile.pdf"),
+    paper = "a4")
+ggplot(bhm) + 
+  geom_tile(aes(x,y,fill=z))+
+  theme(text=element_text(size=12,family = "Arial"), axis.text.x=element_text(angle=-90,vjust=.2, hjust=0, size = 3), axis.text.y =element_blank(),axis.ticks = element_blank(), axis.line = element_blank(),
+        title = element_text(size = 2),legend.key.size = unit(0.5,"cm"),legend.text = element_text(size = 5),legend.title = element_blank(), plot.title = element_text(hjust = 0.5))+
+  labs(title="Host PMNFREE DE genes", x="",y="")+ scale_fill_gradient2(low="dodgerblue4", mid="white", high="firebrick3", 
+                 midpoint=0,    
+                 breaks=seq(-2,2,1),
+                 limits=c(-2, 2))+
+  coord_fixed(expand = TRUE,ratio = 0.25)
+dev.off()
+
+
+```
+
+
+#Gc Opaless and H041 DE (non-core) (only for Input Block 1 & 2)
+
+```{r}
+
+n <-1
+if (grepl("130s",output_dir)) { n <- 2}
+if (grepl("H041",output_dir)) { n <- 1}
+
+dds <- DESeq(dds, betaPrior = F)
+
+contrast.list <- data.frame(Contrast=comparisons)
+upset <- c()
+
+for (i in contrast.list$Contrast) {
+	pair <- as.data.frame(strsplit(as.character(i),'_vs_'))
+	DE.genes <- as.data.frame(results(dds, contrast=c("condition",as.character(pair[1,]),as.character(pair[2,])), independentFiltering = TRUE, alpha=0.05))
+	DE.genes <- na.omit(DE.genes)
+	write.table(data.frame("ID"=rownames(DE.genes),DE.genes), file = paste0(output_dir,"/",i,"_unfiltered_degenes.txt"), append = F, row.names = F,sep = "\t", quote = FALSE)
+
+	DE.genes <- DE.genes[DE.genes$padj <= 0.05,]
+  DE.genes <- DE.genes[abs(DE.genes$log2FoldChange) >=1,]
+  
+	write.table(data.frame("ID"=rownames(DE.genes),DE.genes), file = paste0(output_dir,"/",i,"_FDRLFC_degenes.txt"), append = F, row.names = F,sep = "\t", quote = FALSE)
+	genes <- as.data.frame(c(rep_len(1,length.out = length(row.names(DE.genes)))),row.names = rownames(DE.genes) )
+	upset <- merge.all(upset,genes)
+
+}
+
+colnames(upset) <- as.vector(contrast.list$Contrast)
+upset[is.na(upset)]<-0
+
+write.table(upset, file = paste0(output_dir,"/","Upset_FDR_GeneMatrixLFC.txt"), append = F, row.names = T,sep = "\t")
+
+upset.plot <- upset(upset, sets = colnames(upset), sets.bar.color = c(rep("orange",n),rep("green",n)), point.size = 1.5,text.scale = 0.7,
+              order.by = "freq", nintersects = 60)
+
+pdf(paste0(output_dir,"/Upset_degenes_plot_LFC.pdf"),family = "Arial",
+    height=5,
+    width=8)
+print(upset.plot)
+dev.off()
+print(upset.plot)
+
+```
+
+#Gc Opaless and H041 DE (core/Heatmap/KEGG) (only for Input Block 4)
+
+```{r}
+
+upsetngo130 <- read.delim(paste0(input_directory,"/130c"), header = T, row.names = 1)
+upsetngoh041 <- read.delim(paste0(input_directory,"/H041c"), header = T, row.names = 1)
+
+mergengode<- merge.all(upsetngo130,upsetngoh041)
+mergengode[is.na(mergengode)]<-0
+mergengode
+
+
+upset.plot.ngo1 <- upset(mergengode, sets = colnames(mergengode)[c(2,4,6)], sets.bar.color = "green", point.size = 1.5,text.scale = 0.7,
+                         queries = list(list(query = intersects, params = colnames(mergengode)[c(2,4,6)], color = "royalblue3", active = T)),
+              order.by = "freq", nintersects = 60)
+
+print(upset.plot.ngo1)
+
+t1v0 <- rownames(query_upset(set = mergengode[,c(2,4,6)], queries = colnames(mergengode[,c(2,4,6)])))
+
+pdf(paste0(output_dir,"/Upset_degenes_plot_1v0.pdf"),
+    height=5,
+    width=8)
+print(upset.plot.ngo1)
+dev.off()
+
+counts.path <- paste0(input_directory,"/coreNGOho41Opa_counts.txt") 
+groups.path <- paste0(input_directory,"/coreNGOho41Opa_groups.txt") 
+counts <- read.delim(counts.path, header = T, row.names = 1)
+design <- read.delim(groups.path, header = T)
+if (length(colnames(design)) > 4) {
+  dds <- DESeqDataSetFromMatrix(countData = floor(counts), colData = design, design = ~ donor + condition )#+condition:donor ) +strain +
+} else {
+  dds <- DESeqDataSetFromMatrix(countData = counts, colData = design, design = ~ condition )
+}
+dds <- estimateSizeFactors(dds)
+dds <- estimateDispersions(dds)
+
+counts.vsd <- as.data.frame(getVarianceStabilizedData(dds))
+
+furd <- counts.vsd[t1v0,]
+
+furd$H041_1h <- rowMeans(furd[,c(1:4)])
+furd$PMN_H041_0h <- rowMeans(furd[,c(5:9)])
+furd$PMN_H041_1h <- rowMeans(furd[,c(10:13)])
+furd$X130_1h <- rowMeans(furd[,c(14:19)])
+furd$PMN_130_0h <- rowMeans(furd[,c(20:25)])
+furd$PMN_130_1h <- rowMeans(furd[,c(26:30)])
+furd$X3X130_1h <- rowMeans(furd[,c(31:35)])
+furd$PMN_3X130_0h <- rowMeans(furd[,c(36:41)])
+furd$PMN_3X130_1h <- rowMeans(furd[,c(42:46)])
+
+furd <- furd[,c("X130_1h","X3X130_1h","H041_1h","PMN_130_0h","PMN_3X130_0h","PMN_H041_0h","PMN_130_1h","PMN_3X130_1h","PMN_H041_1h")]
+
+bhm <- t(scale(t(furd)))
+
+bhm <- as.matrix(bhm)
+bhm <- bhm[rowSums(bhm)!=0,]
+ord <- hclust(d = dist(bhm))$order
+ord2 <- hclust(d = dist(t(bhm)))$order
+bhm <- bhm[rev(ord),]#ord2]
+bhm <- melt(bhm)
+colnames(bhm) = c("y","x","z")
+
+hmcol <- colorRampPalette(c("navyblue","white","firebrick3"))(75)
+pdf(paste0(output_dir,"/t1vt0ngotile.pdf"),
+    paper = "a4")
+ggplot(bhm) + 
+  geom_tile(aes(x,y,fill=z))+
+#  scale_fill_gradientn(colours=hmcol)+
+  theme(axis.text.x=element_text(angle=-90,vjust=.2, hjust=0, size = 3), axis.text.y =element_text(hjust=0.2, size = 3),axis.ticks = element_blank(), axis.line = element_blank(),
+        title = element_text(size = 2),legend.key.size = unit(0.5,"cm"),legend.text = element_text(size = 5),legend.title = element_blank(), plot.title = element_text(hjust = 0.5))+
+  labs(title="23 PMN+Gc_1h_vs_PMN+Gc_0h DE genes", x="",y="")+ scale_fill_gradient2(low="dodgerblue4", mid="white", high="firebrick3", 
+                 midpoint=0,    
+                 breaks=seq(-2.5,2.5,1),
+                 limits=c(-2.5, 2.5))+
+  coord_fixed(expand = TRUE,ratio = 1)
+dev.off()
+
+
+
+Gc_context <- rownames(mergengode[rowSums(mergengode[,c(2,4,6)])>0,])
+
+G_list <- data.frame(DE=gsub("NGO","NGO_",Gc_context), row.names = gsub("NGO","NGO_",Gc_context))
+
+FEP <- find_enriched_pathway(G_list$DE, species = "ngo", returned_pvalue = 0.05,
+                             returned_adjpvalue = 0.05, returned_genenumber = 2,
+                             download_latest = T, refGene = NULL)
+write.table(FEP$stastic, file = paste0(output_dir,"/118_FDR_KEGG.txt"), append = F, row.names = T,sep = "\t")
+    
+setwd(output_dir)
+
+oGE <- read.delim(paste0(input_directory,"/GC_118DE_LFC.txt"), header = T, row.names = 1)
+
+pathview(gene.data = oGE,
+         pathway.id = "00910",
+         species = "ngo",
+         kegg.dir = "/Users/admello/OneDrive - University of Maryland School of Medicine/Desktop/",
+         gene.idtype  = "kegg",
+         out.suffix = ".TX_only",
+         limit = 3,
+         same.layer = F, na.col = "white", low = "blue", mid = "gray", high = "red", cex =0.15) 
+
+```
+
+
+
+#Gc PanOCT/Orthology (Independant of input blocks)
+```{r}
+panoct.path <- paste0(input_directory,"/PanOCT2table.out")
+strain.prefixes <- c("NGO","Opaless3X","H041")
+strains <- c("FA1090","Opaless3X","H041")
+output_dir <- output_directory
+
+panoct <- read.delim(panoct.path, header = F)#, row.names = 1)
+panoct <- panoct[,c(2,1)]
+panoct$V2 <- gsub("\\|.*$","",panoct$V2)
+panoctids <- unique(panoct$V2)
+
+df <- as.data.frame(matrix(0, ncol = length(strains), nrow = length(panoctids)))
+colnames(df)<-strains
+rownames(df)<-panoctids
+
+for (i in panoctids){
+  for (j in 1:length(panoct[panoct$V2==i,]$V1)){
+    for (k in 1:length(strain.prefixes)){
+          if(str_detect(as.vector(panoct[panoct$V2==i,]$V1[j]), strain.prefixes[k], negate = FALSE)==TRUE){
+            df[i,k]<-1
+          }
+    }
+  }
+}
+
+upset.plot <- upset(df, sets = colnames(df), sets.bar.color = "orange", point.size = 1.5,text.scale = 0.7,
+              order.by = "freq")
+print(upset.plot)
+pdf(paste0(output_dir,"/Upset_panoct_plot.pdf"),
+    height=5,
+    width=8)
+print(upset.plot)
+dev.off()
+
+write.table(df, file = paste0(output_dir,"/","Upset_panoct_Matrix.txt"), append = F, row.names = T,sep = "\t")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
