@@ -20,7 +20,6 @@ require(gtools)
 require(pvclust)
 require(reshape)
 require(vegan)
-require(WGCNA)
 require(ggfortify)
 require(ggrepel)
 require(GGally)
@@ -644,7 +643,7 @@ pathview(gene.data = oGE,
 
 
 
-#Gc PanOCT/Orthology (Independant of input blocks)
+#Gc PanOCT/Orthology (Independent of input blocks)
 ```{r}
 panoct.path <- paste0(input_directory,"/PanOCT2table.out")
 strain.prefixes <- c("NGO","Opaless3X","H041")
