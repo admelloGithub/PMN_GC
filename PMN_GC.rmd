@@ -277,7 +277,7 @@ dev.off()
 
 ```
 
-#Deseq Independant Filtered Rarefy
+#Deseq Independent Filtered Rarefy
 
 ```{r}
 
