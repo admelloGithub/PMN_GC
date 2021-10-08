@@ -593,7 +593,6 @@ furd <- furd[,c("X130_1h","X3X130_1h","H041_1h","PMN_130_0h","PMN_3X130_0h","PMN
 bhm <- t(scale(t(furd)))
 
 bhm <- as.matrix(bhm)
-bhm <- bhm[rowSums(bhm)!=0,]
 ord <- hclust(d = dist(bhm))$order
 ord2 <- hclust(d = dist(t(bhm)))$order
 bhm <- bhm[rev(ord),]#ord2]
