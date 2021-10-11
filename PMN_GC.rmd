@@ -628,6 +628,7 @@ write.table(FEP$stastic, file = paste0(output_dir,"/118_FDR_KEGG.txt"), append =
 setwd(output_dir)
 
 oGE <- read.delim(paste0(input_directory,"/GC_118DE_LFC.txt"), header = T, row.names = 1)
+rownames(oGE) <- gsub("NGO","NGO_",row.names(oGE))
 
 pathview(gene.data = oGE,
          pathway.id = "00910",
