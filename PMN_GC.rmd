@@ -381,7 +381,7 @@ write.table(upset1, file = paste0(output_dir,"/","Upset1_FDR_GeneMatrixLFC.txt")
 write.table(upset2, file = paste0(output_dir,"/","Upset2_FDR_GeneMatrixLFC.txt"), append = F, row.names = T,sep = "\t")
 
 upset.plot <- upset(upset, sets = colnames(upset), sets.bar.color = "orange", point.size = 1.5,text.scale = 1,
-                     queries = list(list(query = intersects, params = comparisons, color = "red", active = T),list(query = intersects, params = c("130+PMN_1h_vs_130+PMN_0h","3X130+PMN_1h_vs_3X130+PMN_0h","H041+PMN_1h_vs_H041+PMN_0h"), color = "green", active = T)),
+                     queries = list(list(query = intersects, params = comparisons, color = "mediumpurple1", active = T),list(query = intersects, params = c("130+PMN_1h_vs_130+PMN_0h","3X130+PMN_1h_vs_3X130+PMN_0h","H041+PMN_1h_vs_H041+PMN_0h"), color = "green", active = T)),
               order.by = "freq", nintersects = 60)
 
 upset.plot1 <- upset(upset1, sets = colnames(upset1), sets.bar.color = "red", point.size = 1.5,text.scale = 1,
@@ -419,7 +419,7 @@ colnames(upset3) <- c("Time",as.vector(contrast.list$Contrast))
 upset3[is.na(upset3)]<-0
 write.table(upset3, file = paste0(output_dir,"/","Upset3_FDR_GeneMatrixLFC.txt"), append = F, row.names = T,sep = "\t")
 
-upset.plot3 <- upset(upset3, sets = colnames(upset3), sets.bar.color = c("red",rep("orange",3)), point.size = 1.5,text.scale = 1,
+upset.plot3 <- upset(upset3, sets = colnames(upset3), sets.bar.color = c("mediumpurple1",rep("orange",3)), point.size = 1.5,text.scale = 1,
                      queries = list(list(query = intersects, params = colnames(upset3), color = "green", active = T)),
               order.by = "freq", nintersects = 60)
 
@@ -466,7 +466,6 @@ hm <- hm[,c("PMN_0h","PMN_130_0h","PMN_3X130_0h","PMN_H041_0h","PMN_1h","PMN_130
 bhm <- t(scale(t(hm)))
 
 bhm <- as.matrix(bhm)
-bhm <- bhm[rowSums(bhm)!=0,]
 ord <- hclust(d = dist(bhm))$order
 ord2 <- hclust(d = dist(t(bhm)))$order
 bhm <- bhm[rev(ord),]#ord2]
@@ -480,7 +479,7 @@ ggplot(bhm) +
   geom_tile(aes(x,y,fill=z))+
   theme(text=element_text(size=12,family = "Arial"), axis.text.x=element_text(angle=-90,vjust=.2, hjust=0, size = 3), axis.text.y =element_blank(),axis.ticks = element_blank(), axis.line = element_blank(),
         title = element_text(size = 2),legend.key.size = unit(0.5,"cm"),legend.text = element_text(size = 5),legend.title = element_blank(), plot.title = element_text(hjust = 0.5))+
-  labs(title="Host PMNFREE DE genes", x="",y="")+ scale_fill_gradient2(low="dodgerblue4", mid="white", high="firebrick3", 
+  labs(title="Host Time-Adjusted DE genes", x="",y="")+ scale_fill_gradient2(low="dodgerblue4", mid="white", high="firebrick3", 
                  midpoint=0,    
                  breaks=seq(-2,2,1),
                  limits=c(-2, 2))+
